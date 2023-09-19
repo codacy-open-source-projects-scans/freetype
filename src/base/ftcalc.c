@@ -917,36 +917,31 @@
 
   /* documentation is in ftcalc.h */
 
-  FT_BASE_DEF( FT_Int32 )
-  FT_SqrtFixed( FT_Int32  x )
+  /* Algorithm and code by Christophe Meessen (1993) */ 
+  /* with overflow fixed.                            */
+  FT_BASE_DEF( FT_UInt32 )
+  FT_SqrtFixed( FT_UInt32  v )
   {
-    FT_UInt32  root, rem_hi, rem_lo, test_div;
-    FT_Int     count;
+    FT_UInt32  r = v >> 1;
+    FT_UInt32  q = ( v & 1 ) << 15;
+    FT_UInt32  b = 0x20000000;
+    FT_UInt32  t;
 
 
-    root = 0;
-
-    if ( x > 0 )
+    do
     {
-      rem_hi = 0;
-      rem_lo = (FT_UInt32)x;
-      count  = 24;
-      do
+      t = q + b;
+      if ( r >= t )
       {
-        rem_hi   = ( rem_hi << 2 ) | ( rem_lo >> 30 );
-        rem_lo <<= 2;
-        root   <<= 1;
-        test_div = ( root << 1 ) + 1;
-
-        if ( rem_hi >= test_div )
-        {
-          rem_hi -= test_div;
-          root   += 1;
-        }
-      } while ( --count );
+        r -= t;
+        q  = t + b;  /* equivalent to q += 2*b */
+      }
+      r <<= 1;
+      b >>= 1;
     }
+    while ( b > 0x20 );
 
-    return (FT_Int32)root;
+    return q >> 7;
   }
 
 #endif /* 0 */
