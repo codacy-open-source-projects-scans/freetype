@@ -63,8 +63,7 @@
 #else /* !STANDALONE_ */
 
 #include "ftraster.h"
-#include <freetype/internal/ftcalc.h> /* for FT_MulDiv and FT_MulDiv_No_Round */
-#include <freetype/ftoutln.h>         /* for FT_Outline_Get_CBox              */
+#include <freetype/internal/ftcalc.h> /* for FT_MulDiv_No_Round */
 
 #endif /* !STANDALONE_ */
 
@@ -252,7 +251,6 @@
   /* On the other hand, SMulDiv means `Slow MulDiv', and is used typically */
   /* for clipping computations.  It simply uses the FT_MulDiv() function   */
   /* defined in `ftcalc.h'.                                                */
-#define SMulDiv           FT_MulDiv
 #define SMulDiv_No_Round  FT_MulDiv_No_Round
 
   /* The rasterizer is a very general purpose component; please leave */
@@ -1344,7 +1342,7 @@
         ymax = y1;
       }
 
-      if ( y2 < ymin || y2 > ymax )
+      if ( y2 < FLOOR( ymin ) || y2 > CEILING( ymax ) )
       {
         /* this arc has no given direction, split it! */
         Split_Conic( arc );
@@ -1352,7 +1350,8 @@
       }
       else if ( y1 == y3 )
       {
-        /* this arc is flat, ignore it and pop it from the Bezier stack */
+        /* this arc is flat, advance position */
+        /* and pop it from the Bezier stack   */
         arc -= 2;
 
         ras.lastX = x3;
@@ -1490,7 +1489,7 @@
         ymax2 = y2;
       }
 
-      if ( ymin2 < ymin1 || ymax2 > ymax1 )
+      if ( ymin2 < FLOOR( ymin1 ) || ymax2 > CEILING( ymax1 ) )
       {
         /* this arc has no given direction, split it! */
         Split_Cubic( arc );
@@ -1498,7 +1497,8 @@
       }
       else if ( y1 == y4 )
       {
-        /* this arc is flat, ignore it and pop it from the Bezier stack */
+        /* this arc is flat, advance position */
+        /* and pop it from the Bezier stack   */
         arc -= 3;
 
         ras.lastX = x4;
@@ -1910,11 +1910,13 @@
    *
    *   Advances all profile in the list to the next scanline.  It also
    *   sorts the trace list in the unlikely case of profile crossing.
-   *   In 95%, the list is already sorted.  We need an algorithm which
-   *   is fast in this case.  Bubble sort is enough and simple.
+   *   The profiles are inserted in sorted order.  We might need a single
+   *   swap to fix it when profiles (contours) cross.
+   *   Bubble sort with immediate restart is good enough and simple.
    */
   static void
-  Increment( PProfileList  list )
+  Increment( PProfileList  list,
+             Int           flow )
   {
     PProfile  *old, current, next;
 
@@ -1926,7 +1928,7 @@
       current = *old;
       if ( --current->height )
       {
-        current->offset += ( current->flags & Flow_Up ) ? 1 : -1;
+        current->offset += flow;
         current->X       = current->x[current->offset];
         old = &current->link;
       }
@@ -1934,7 +1936,7 @@
         *old = current->link;  /* remove */
     }
 
-    /* Then sort them */
+    /* Then make sure the list remains sorted */
     old     = list;
     current = *old;
 
@@ -1956,7 +1958,7 @@
         current->link = next->link;
         next->link    = current;
 
-        /* Restarting */
+        /* this is likely the only necessary swap -- restart */
         old     = list;
         current = *old;
       }
@@ -2248,7 +2250,7 @@
     /* use y_turns to set the drawing range */
 
     min_Y = (Int)ras.maxBuff[0];
-    max_Y = (Int)ras.sizeBuff[-1] - 1;
+    max_Y = (Int)ras.maxBuff[ras.numTurns] - 1;
 
     /* now initialize the sweep */
 
@@ -2268,6 +2270,8 @@
         {
           *Q = P->link;  /* remove */
 
+          /* each active list contains profiles with the same flow */
+          /* left and right are arbitrary, correspond to TrueType  */
           if ( P->flags & Flow_Up )
             InsNew( &draw_left,  P );
           else
@@ -2295,6 +2299,8 @@
           Long  xs;
 
 
+          /* TrueType should have x2 > x1, but can be opposite */
+          /* by mistake or in CFF/Type1, fix it then           */
           if ( x1 > x2 )
           {
             xs = x1;
@@ -2419,8 +2425,8 @@
 
         ras.Proc_Sweep_Step( RAS_VAR );
 
-        Increment( &draw_left  );
-        Increment( &draw_right );
+        Increment( &draw_left,   1 );
+        Increment( &draw_right, -1 );
       }
       while ( ++y < y_turn );
     }
