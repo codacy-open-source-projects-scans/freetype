@@ -24,7 +24,7 @@
 #
 
 project('freetype2', 'c',
-  meson_version: '>= 0.55.0',
+  meson_version: '>= 0.60.0',
   version: run_command('builds/meson/extract_freetype_version.py',
                        'include/freetype/freetype.h',
                        check: true).stdout().strip(),
@@ -236,6 +236,7 @@ endif
 # might make these platform-specific files much smaller, and could be moved
 # into `ftsystem.c` as well.
 
+ft2_sources += 'src/dlg/dlgwrap.c'
 if host_machine.system() == 'windows'
   winmod = import('windows')
   ft2_sources += [
@@ -339,7 +340,7 @@ if bzip2_dep.found()
 endif
 
 # PNG support.
-libpng_dep = dependency('libpng',
+libpng_dep = dependency('libpng', 'PNG',
   required: get_option('png'),
   fallback: 'libpng')
 
